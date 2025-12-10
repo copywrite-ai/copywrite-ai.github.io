@@ -1,1 +1,0 @@
-# copywrite-ai.github.io

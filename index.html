@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyNanoCloud</title>
+    <style>
+        body, html { margin: 0; padding: 0; background: #050505; overflow: hidden; font-family: 'Inter', sans-serif; }
+        
+        #viewport { width: 100vw; height: 100vh; overflow: hidden; position: relative; }
+        
+        /* 摄像机层 */
+        #camera-layer {
+            width: 1600px;
+            height: 1200px;
+            background: #111;
+            transform-origin: 0 0;
+            will-change: transform;
+            position: relative;
+            /* 网格背景，方便观察移动 */
+            background-image: radial-gradient(#333 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        /* --- 模拟光标 --- */
+        #fake-cursor {
+            position: absolute; width: 20px; height: 20px;
+            background: red; border-radius: 50%; /* 用红点代表光标，方便看清位置 */
+            pointer-events: none; z-index: 9999; top: 0; left: 0;
+            box-shadow: 0 0 10px rgba(255,0,0,0.8);
+            transition: transform 0.1s linear;
+        }
+        #fake-cursor::after { content: "Cursor"; position: absolute; left: 24px; top: 0; color: red; font-size: 10px; font-weight: bold; }
+
+        /* --- UI 元素 --- */
+        .container { padding: 50px; display: flex; gap: 40px; }
+        
+        .sidebar { width: 250px; height: 600px; background: #1a1a1a; border-radius: 12px; border: 1px solid #333; padding: 20px; }
+        .menu-item { height: 20px; background: #333; margin-bottom: 10px; border-radius: 4px; width: 60%; }
+
+        .content { flex: 1; }
+        
+        h1 { color: #fff; margin-bottom: 10px; }
+        p { color: #666; max-width: 500px; margin-bottom: 40px; }
+
+        /* 🌟 核心测试对象：智能构图区域 🌟 */
+        /* 给这些元素加上 .smart-frame 类，模拟算法识别出的“高价值区域” */
+        .smart-frame {
+            position: relative;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        /* 激活状态下的视觉反馈 */
+        .smart-frame.active-frame {
+            border-color: #007acc;
+            box-shadow: 0 0 0 4px rgba(0, 122, 204, 0.1);
+        }
+
+        /* 场景 1: 大段文本 */
+        #text-block {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            padding: 40px;
+            border-radius: 12px;
+            max-width: 600px;
+            color: #ccc;
+            line-height: 1.8;
+            font-size: 16px;
+        }
+
+        /* 场景 2: 宽大的 Dashboard 表格 */
+        #wide-table {
+            margin-top: 50px;
+            width: 900px; /* 特别宽，需要 Zoom Out 才能看完 */
+            height: 300px;
+            background: #151515;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+        .cell { background: #222; border-radius: 6px; }
+
+        /* 状态指示 */
+        #hud {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: #000; border: 1px solid #333; color: #0f0; padding: 10px 20px;
+            font-family: monospace; border-radius: 8px; z-index: 10000;
+        }
+    </style>
+</head>
+<body>
+
+<div id="hud">Mode: Free Follow (Move mouse to test)</div>
+
+<div id="viewport">
+    <div id="camera-layer">
+        <div id="fake-cursor"></div>
+        
+        <div class="container">
+            <div class="sidebar">
+                <div style="color:white; margin-bottom:20px; font-weight:bold;">Menu</div>
+                <div class="menu-item" style="width:80%"></div>
+                <div class="menu-item"></div>
+                <div class="menu-item"></div>
+            </div>
+
+            <div class="content">
+                <h1>Auto-Framing Algorithm</h1>
+                <p>Move the red cursor into the blocks below. Notice how the camera detaches from the cursor to show the full context.</p>
+
+                <!-- 🌟 测试对象 1：文本块 🌟 -->
+                <div id="text-block" class="smart-frame">
+                    <h3 style="color:#fff; margin-top:0;">1. The "Readme" Scenario</h3>
+                    <p style="color:#888;">
+                        Wait here! Even if you move the cursor to the corners of this box, the camera stays centered. <br><br>
+                        Screen Studio recognizes that this is a <strong>semantic unit</strong>. It calculates a bounding box and forces the camera to "fit" this element into the viewport with a comfortable padding. This prevents the "shaky cam" effect when reading long texts.
+                    </p>
+                    <div style="background:#222; padding:10px; border-radius:4px; font-family:monospace; color:#dcdcaa;">
+                        npm install smart-camera-system
+                    </div>
+                </div>
+
+                <!-- 🌟 测试对象 2：超宽元素 🌟 -->
+                <div id="wide-table" class="smart-frame">
+                    <div style="grid-column: span 4; color: white; margin-bottom: 10px; font-weight: bold;">
+                        2. The "Wide Dashboard" Scenario (Requires Zoom Out)
+                    </div>
+                    <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+                    <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const CONFIG = {
+        friction: 0.05,
+        padding: 0.2, // 20% 留白
+        viewportW: window.innerWidth,
+        viewportH: window.innerHeight,
+        defaultScale: 1.2
+    };
+
+    const state = {
+        cam: { x: 0, y: 0, scale: 1 },
+        target: { x: 0, y: 0, scale: 1 },
+        cursor: { x: 400, y: 300 }, // 虚拟光标的绝对坐标
+        activeElement: null // 当前锁定的元素
+    };
+
+    const els = {
+        layer: document.getElementById('camera-layer'),
+        cursor: document.getElementById('fake-cursor'),
+        hud: document.getElementById('hud')
+    };
+
+    // 每一帧的物理循环
+    function tick() {
+        // --- 核心逻辑：决策目标位置 ---
+        if (state.activeElement) {
+            // A. 锁定模式：无视光标，盯着元素中心
+            // 我们已经算好了 target，这里不需要每帧重算，除非元素在动
+        } else {
+            // B. 自由模式：跟随光标
+            state.target.x = state.cursor.x;
+            state.target.y = state.cursor.y;
+            state.target.scale = CONFIG.defaultScale;
+        }
+
+        // --- 物理平滑 (Lerp) ---
+        state.cam.x += (state.target.x - state.cam.x) * CONFIG.friction;
+        state.cam.y += (state.target.y - state.cam.y) * CONFIG.friction;
+        state.cam.scale += (state.target.scale - state.cam.scale) * (CONFIG.friction * 0.8);
+
+        // --- 渲染 ---
+        // 注意：Translate 需要基于 Scale 反向补偿，保持摄像机中心对准目标
+        const tx = (CONFIG.viewportW / 2) - (state.cam.x * state.cam.scale);
+        const ty = (CONFIG.viewportH / 2) - (state.cam.y * state.cam.scale);
+
+        els.layer.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${state.cam.scale})`;
+        
+        requestAnimationFrame(tick);
+    }
+    tick();
+
+    // --- 算法核心：智能构图计算 ---
+    function checkSmartFraming(x, y) {
+        // 1. 碰撞检测：光标下面有东西吗？
+        // 注意：因为我们是模拟光标，这里用 document.elementFromPoint 模拟
+        // 在实际录屏软件中，这是通过操作系统 Accessibility API 获取的
+        
+        // 为了演示，我们手动判断光标是否在某个 .smart-frame 的 rect 内
+        const frames = document.querySelectorAll('.smart-frame');
+        let found = null;
+
+        // 必须把光标坐标转换成 DOM 坐标 (这里因为光标就在 layer 里，直接用)
+        frames.forEach(el => {
+            // 计算元素相对于 layer 的绝对位置 (简易版，不考虑旋转)
+            const rect = {
+                left: el.offsetLeft,
+                top: el.offsetTop,
+                width: el.offsetWidth,
+                height: el.offsetHeight
+            };
+            // 递归父级 offset
+            let p = el.offsetParent;
+            while(p && p.id !== 'camera-layer') {
+                rect.left += p.offsetLeft;
+                rect.top += p.offsetTop;
+                p = p.offsetParent;
+            }
+
+            // AABB 碰撞检测
+            if (x >= rect.left && x <= rect.left + rect.width &&
+                y >= rect.top && y <= rect.top + rect.height) {
+                found = { el, rect };
+            }
+        });
+
+        // 2. 状态切换逻辑
+        if (found) {
+            if (state.activeElement !== found.el) {
+                // --> 进入新元素
+                state.activeElement = found.el;
+                found.el.classList.add('active-frame');
+                els.hud.innerText = "Mode: LOCKED on Block (Auto-Fit)";
+                els.hud.style.color = "#007acc";
+                els.hud.style.borderColor = "#007acc";
+
+                // 3. 计算最佳构图 (Fit-to-Screen)
+                const center = {
+                    x: found.rect.left + found.rect.width / 2,
+                    y: found.rect.top + found.rect.height / 2
+                };
+
+                // 计算缩放：我们要让元素占屏幕宽度的 (1 - padding)
+                // 比如屏幕宽 1920，元素宽 600，留白 20% -> 目标宽 1920 / 1.2 = 1600
+                // 放大倍数 = 1600 / 600
+                
+                // 宽适配
+                const scaleX = CONFIG.viewportW / (found.rect.width * (1 + CONFIG.padding));
+                // 高适配 (防止长文下面被切掉)
+                const scaleY = CONFIG.viewportH / (found.rect.height * (1 + CONFIG.padding));
+
+                // 取较小值，保证完全放入屏幕
+                let fitScale = Math.min(scaleX, scaleY);
+                
+                // 限制一下，别放太小，也别放太大
+                fitScale = Math.min(Math.max(fitScale, 0.6), 2.0);
+
+                state.target.x = center.x;
+                state.target.y = center.y;
+                state.target.scale = fitScale;
+            }
+        } else {
+            if (state.activeElement) {
+                // --> 离开元素
+                state.activeElement.classList.remove('active-frame');
+                state.activeElement = null;
+                els.hud.innerText = "Mode: Free Follow";
+                els.hud.style.color = "#0f0";
+                els.hud.style.borderColor = "#333";
+            }
+        }
+    }
+
+    // --- 自动化脚本 ---
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+
+    async function runDemo() {
+        // 初始位置
+        state.cursor = { x: 200, y: 300 };
+        updateCursorVisual();
+
+        await wait(1000);
+
+        // 1. 移动到文本块 (触发 Auto-Framing)
+        await glideTo(600, 400); // 移动到 #text-block 中心附近
+        
+        // 2. 在文本块内部乱晃 (演示 Camera Lock)
+        // 哪怕鼠标在动，摄像机应该纹丝不动
+        await wait(500);
+        await glideTo(550, 380, 400);
+        await glideTo(650, 420, 400);
+        await glideTo(580, 450, 400);
+        
+        await wait(1000);
+
+        // 3. 离开文本块 (恢复 Free Follow)
+        await glideTo(900, 200); // 移到中间空白处
+        
+        await wait(1000);
+
+        // 4. 移动到宽表格 (触发 Zoom Out)
+        await glideTo(1100, 800); // 移到 #wide-table
+        
+        await wait(2000);
+
+        // 5. 结束循环
+        await glideTo(200, 300);
+        runDemo();
+    }
+
+    // 简单的平滑光标移动函数
+    async function glideTo(x, y, duration = 1000) {
+        const startX = state.cursor.x;
+        const startY = state.cursor.y;
+        const startTime = performance.now();
+
+        return new Promise(resolve => {
+            function step(now) {
+                const elapsed = now - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                // Ease In Out
+                const ease = progress < .5 ? 2 * progress * progress : -1 + (4 - 2 * progress) * progress;
+
+                state.cursor.x = startX + (x - startX) * ease;
+                state.cursor.y = startY + (y - startY) * ease;
+                
+                updateCursorVisual();
+                
+                // 关键：每帧检测智能构图
+                checkSmartFraming(state.cursor.x, state.cursor.y);
+
+                if (progress < 1) requestAnimationFrame(step);
+                else resolve();
+            }
+            requestAnimationFrame(step);
+        });
+    }
+
+    function updateCursorVisual() {
+        els.cursor.style.transform = `translate(${state.cursor.x}px, ${state.cursor.y}px)`;
+    }
+
+    // 启动
+    runDemo();
+
+</script>
+</body>
+</html>
